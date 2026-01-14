@@ -1,0 +1,45 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15
+    container_name: myproject_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: myproject_dev
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: devpass123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devuser -d myproject_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Python Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: myproject_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_NAME: myproject_dev
+      DB_USER: devuser
+      DB_PASSWORD: devpass123
+      DB_PORT: 5432
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    command: python main.py
+
+volumes:
+  postgres_data:
