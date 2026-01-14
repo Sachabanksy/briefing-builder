@@ -17,7 +17,11 @@ INSERT INTO economic_data_sources (
         'Index 2015=100',
         'latest',
         'ONS Consumer Prices Index (CPI) main annual rate',
-        jsonb_build_object('category', 'inflation', 'notes', 'Headline CPI, NSA')
+        jsonb_build_object(
+            'category', 'inflation',
+            'notes', 'Headline CPI, NSA',
+            'resource_path', '/economy/inflationandpriceindices/timeseries/chaw/mm23'
+        )
     ),
     (
         'oecd_cli_uk',

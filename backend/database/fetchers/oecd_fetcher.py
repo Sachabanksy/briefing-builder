@@ -1,16 +1,8 @@
-"""
-Fetch economic indicators from the OECD SDMX-JSON API and persist them into Postgres.
-
-Example:
-    python database/fetchers/oecd_fetcher.py --dataset MEI_CLI --location GBR --subject CLOLITOT --measure STSA --frequency M
-"""
-
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List
 
 import requests
 
@@ -18,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.economic_data_service import store_oecd_timeseries, get_data_source_config
+from src.economic_data_service import store_oecd_timeseries
 
 
 OECD_BASE_URL = "https://stats.oecd.org/SDMX-JSON/data"
@@ -146,81 +138,3 @@ def fetch_and_store(
         default_unit=unit,
     )
     return store_oecd_timeseries(records)
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Fetch an OECD economic indicator and store it.")
-    parser.add_argument("--config", help="Slug from economic_data_sources lookup (provider must be OECD)")
-    parser.add_argument("--dataset", help="OECD dataset code (e.g. MEI_CLI)")
-    parser.add_argument("--location", help="Country/region code (defaults to GBR when not using --config)")
-    parser.add_argument("--subject", help="Subject/indicator code")
-    parser.add_argument("--measure", help="Measure code, e.g. STSA, CUR")
-    parser.add_argument("--frequency", help="Frequency code (A, Q, M)")
-    parser.add_argument("--time", dest="time_window", help="Optional time window, e.g. 2019-2023")
-    parser.add_argument("--unit", help="Override unit label for storage")
-    args = parser.parse_args()
-
-    manual_required = [args.dataset, args.subject, args.measure, args.frequency]
-    if not args.config and not all(manual_required):
-        parser.error("Provide --config or specify --dataset, --subject, --measure, and --frequency.")
-
-    return args
-
-
-def resolve_parameters(args: argparse.Namespace) -> Tuple[str, str, str, str, str, str | None, str | None]:
-    if args.config:
-        config = get_data_source_config(args.config, provider="OECD")
-        if not config:
-            raise SystemExit(f"No enabled economic_data_sources entry found for slug '{args.config}' with provider OECD.")
-
-        dataset = (config.get("dataset_code") or config.get("dataset_id") or "").strip()
-        location = (args.location or config.get("location") or "GBR").strip()
-        subject = (config.get("subject") or args.subject or "").strip()
-        measure = (config.get("measure") or args.measure or "").strip()
-        frequency = (config.get("frequency") or args.frequency or "").strip()
-        if not dataset or not subject or not measure or not frequency:
-            raise SystemExit(f"Configuration '{args.config}' is missing dataset/subject/measure/frequency.")
-
-        time_window = args.time_window or config.get("time_filter")
-        unit = args.unit or config.get("unit")
-        return dataset, location, subject, measure, frequency, time_window, unit
-
-    dataset = args.dataset.strip()
-    location = (args.location or "GBR").strip()
-    subject = args.subject.strip()
-    measure = args.measure.strip()
-    frequency = args.frequency.strip()
-    time_window = args.time_window
-    unit = args.unit
-    return dataset, location, subject, measure, frequency, time_window, unit
-
-
-def main() -> None:
-    args = parse_args()
-    (
-        dataset,
-        location,
-        subject,
-        measure,
-        frequency,
-        time_window,
-        unit,
-    ) = resolve_parameters(args)
-
-    inserted = fetch_and_store(
-        dataset=dataset,
-        location=location,
-        subject=subject,
-        measure=measure,
-        frequency=frequency,
-        time_window=time_window,
-        unit=unit,
-    )
-    print(
-        f"Ingested {inserted} OECD observations for dataset={dataset}, "
-        f"location={location}, subject={subject} using config={args.config or 'manual'}."
-    )
-
-
-if __name__ == "__main__":
-    main()
