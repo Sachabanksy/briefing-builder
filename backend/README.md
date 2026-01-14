@@ -145,6 +145,19 @@ docker-compose exec app python scripts/seed_economic_data.py
 ```
 
 The script upserts lookup entries (`fake_ons_cpi`, `fake_oecd_cli`) and generates time-series values so the rest of the app has realistic data without calling external APIs.
+
+### FastAPI service
+
+The backend exposes a FastAPI app (served via Uvicorn on port 8000). Once `docker-compose up` is running you can hit:
+
+- `GET /health` – readiness check.
+- `GET /sources` – all enabled lookup records.
+- `GET /ons/series/{series_id}` – pull ONS observations with optional `dataset_id`, `start_period`, `end_period`, and `limit`.
+- `GET /oecd/series` – provide `dataset_code`, `location`, `subject`, `measure`, `frequency` to query OECD rows.
+- `GET /series/{slug}` – hydrate any configured slug (e.g., `fake_ons_cpi`, `fake_oecd_cli`) and return its data.
+
+Interactive docs live at [http://localhost:8000/docs](http://localhost:8000/docs).
+
 ## Project Structure
 ```
 .
