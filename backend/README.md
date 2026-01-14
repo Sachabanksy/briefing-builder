@@ -113,6 +113,30 @@ docker-compose ps
 docker stats
 ```
 
+## Economic Data Fetchers
+
+Two helper scripts live in `database/fetchers/` for ingesting economic indicators:
+
+- `ons_fetcher.py` pulls UK time-series data directly from the Office for National Statistics (ONS) API.
+- `oecd_fetcher.py` ingests SDMX-JSON observations from the OECD Stats API.
+
+Both scripts normalise the remote payloads and store them in the Postgres tables `ons_economic_series` and `oecd_economic_series`. They can either be run with explicit arguments or by referencing a slug in the lookup table `economic_data_sources`, which is created/seeded during DB init (see entries like `ons_cpi` and `oecd_cli_uk` in `database/init/02-seed.sql`).
+
+Run the scripts via Docker (so they can reach the same Postgres instance as the app):
+
+```bash
+# Fetch CPI data (series L522 in dataset mm23) using the lookup table slug
+docker-compose exec app python database/fetchers/ons_fetcher.py --config ons_cpi --time 2022-2024
+
+# Fetch OECD Composite Leading Indicator for the UK (configured slug)
+docker-compose exec app python database/fetchers/oecd_fetcher.py \
+  --config oecd_cli_uk --time 2020-2024
+
+# Manual invocation also remains available:
+docker-compose exec app python database/fetchers/oecd_fetcher.py \
+  --dataset MEI_CLI --location GBR --subject CLOLITOT --measure STSA --frequency M --time 2020-2024
+```
+
 ## Project Structure
 ```
 .

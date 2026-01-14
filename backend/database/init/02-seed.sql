@@ -1,16 +1,37 @@
 -- database/init/02-seed.sql
 
--- Insert sample users (passwords should be hashed in real app)
-INSERT INTO users (username, email, password_hash) VALUES
-    ('alice', 'alice@example.com', 'hashed_password_1'),
-    ('bob', 'bob@example.com', 'hashed_password_2'),
-    ('charlie', 'charlie@example.com', 'hashed_password_3')
-ON CONFLICT (username) DO NOTHING;
-
--- Insert sample posts
-INSERT INTO posts (user_id, title, content, published) VALUES
-    (1, 'Getting Started with PostgreSQL', 'PostgreSQL is a powerful open-source database...', true),
-    (1, 'Docker Compose Tips', 'Here are some useful Docker Compose patterns...', true),
-    (2, 'Python Best Practices', 'Writing clean Python code...', true),
-    (3, 'My First Draft', 'This is a work in progress...', false)
-ON CONFLICT DO NOTHING;
+-- Seed economic data sources lookup
+INSERT INTO economic_data_sources (
+    slug, provider, dataset_id, dataset_code, series_id, location, subject, measure, frequency, unit, time_filter, description, metadata
+) VALUES
+    (
+        'ons_cpi',
+        'ONS',
+        'mm23',
+        NULL,
+        'L522',
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        'Index 2015=100',
+        'latest',
+        'ONS Consumer Prices Index (CPI) main annual rate',
+        jsonb_build_object('category', 'inflation', 'notes', 'Headline CPI, NSA')
+    ),
+    (
+        'oecd_cli_uk',
+        'OECD',
+        NULL,
+        'MEI_CLI',
+        NULL,
+        'GBR',
+        'CLOLITOT',
+        'STSA',
+        'M',
+        'Index 2015=100',
+        '2018-2024',
+        'OECD Composite Leading Indicator for the United Kingdom',
+        jsonb_build_object('category', 'leading_indicator', 'notes', 'Smoothed, seasonally adjusted')
+    )
+ON CONFLICT (slug) DO NOTHING;
