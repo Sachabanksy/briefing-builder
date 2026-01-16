@@ -115,6 +115,10 @@ export interface Series {
   dataset_id?: string;
   dataset_code?: string;
   slug?: string;
+  location?: string;
+  subject?: string;
+  measure?: string;
+  time_filter?: string;
 }
 
 export interface BriefingOptions {

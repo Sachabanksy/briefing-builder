@@ -164,11 +164,21 @@ def build_data_pack(
         observations = []
         for row in rows:
             parsed = _parse_period(row["period_label"])
-            observations.append((parsed, row.get("value")))
+            value = row.get("value")
+            if value is not None:
+                try:
+                    value = float(value)
+                except (TypeError, ValueError):
+                    value = None
+            observations.append((parsed, value))
 
         derived = _derive_stats(observations, frequency)
         status, checks, series_limits = _quality_checks(observations, frequency)
         limitations.extend(series_limits)
+
+        ingested_at = config.get("updated_at")
+        if isinstance(ingested_at, (datetime, date)):
+            ingested_at = ingested_at.isoformat()
 
         series_payloads.append(
             {
@@ -191,7 +201,7 @@ def build_data_pack(
                 "derived": derived,
                 "provenance": {
                     "pulled_at": datetime.utcnow().isoformat() + "Z",
-                    "ingested_at": config.get("updated_at"),
+                    "ingested_at": ingested_at,
                 },
                 "quality_status": status,
                 "quality_checks": checks,

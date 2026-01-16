@@ -94,13 +94,17 @@ function normalizeSeries(source: EconomicSource): Series {
     dataset_id: source.dataset_id ?? undefined,
     dataset_code: source.dataset_code ?? undefined,
     slug: source.slug,
+    location: source.location ?? metadata.location,
+    subject: source.subject ?? metadata.subject,
+    measure: source.measure ?? metadata.measure,
+    time_filter: source.time_filter ?? metadata.time_filter,
   };
 }
 
 export async function getTopics(): Promise<string[]> {
   try {
     const response = await handleResponse<EconomicSource[]>(
-      fetch(`${API_BASE}/sources`, { cache: "no-store" })
+      await fetch(`${API_BASE}/sources`, { cache: "no-store" })
     );
     const topics = Array.from(
       new Set(
@@ -115,21 +119,21 @@ export async function getTopics(): Promise<string[]> {
   }
 }
 
-export async function getSeries(topic: string, query?: string): Promise<Series[]> {
+export async function getSeries(topic?: string, query?: string): Promise<Series[]> {
   const url = new URL(`${API_BASE}/series`);
-  if (topic) {
+  if (topic && topic !== "all") {
     url.searchParams.set("topic", topic);
   }
   if (query) {
     url.searchParams.set("q", query);
   }
-  const response = await handleResponse<EconomicSource[]>(fetch(url, { cache: "no-store" }));
+  const response = await handleResponse<EconomicSource[]>(await fetch(url, { cache: "no-store" }));
   return response.map(normalizeSeries);
 }
 
 export async function createBriefing(payload: CreateBriefingRequest): Promise<BriefingResponse> {
   return handleResponse<BriefingResponse>(
-    fetch(`${API_BASE}/briefings`, {
+    await fetch(`${API_BASE}/briefings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -138,7 +142,9 @@ export async function createBriefing(payload: CreateBriefingRequest): Promise<Br
 }
 
 export async function getBriefingDetail(briefingId: string): Promise<BriefingDetail> {
-  return handleResponse<BriefingDetail>(fetch(`${API_BASE}/briefings/${briefingId}`, { cache: "no-store" }));
+  return handleResponse<BriefingDetail>(
+    await fetch(`${API_BASE}/briefings/${briefingId}`, { cache: "no-store" })
+  );
 }
 
 export async function getBriefingVersion(
@@ -146,7 +152,7 @@ export async function getBriefingVersion(
   versionId: string
 ): Promise<VersionResponse> {
   return handleResponse<VersionResponse>(
-    fetch(`${API_BASE}/briefings/${briefingId}/versions/${versionId}`, { cache: "no-store" })
+    await fetch(`${API_BASE}/briefings/${briefingId}/versions/${versionId}`, { cache: "no-store" })
   );
 }
 
@@ -156,7 +162,7 @@ export async function chatWithBriefing(
   targetVersionId: string
 ): Promise<ChatResponse> {
   return handleResponse<ChatResponse>(
-    fetch(`${API_BASE}/briefings/${briefingId}/chat`, {
+    await fetch(`${API_BASE}/briefings/${briefingId}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, target_version_id: targetVersionId }),
@@ -183,7 +189,7 @@ export async function createComment(
   commentText: string
 ): Promise<{ comment_id: string; status: string }> {
   return handleResponse<{ comment_id: string; status: string }>(
-    fetch(`${API_BASE}/briefings/${briefingId}/comments`, {
+    await fetch(`${API_BASE}/briefings/${briefingId}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ version_id: versionId, anchor, comment_text: commentText }),
@@ -194,7 +200,7 @@ export async function createComment(
 export async function fetchComments(briefingId: string, versionId: string): Promise<Comment[]> {
   const url = new URL(`${API_BASE}/briefings/${briefingId}/comments`);
   url.searchParams.set("version_id", versionId);
-  const response = await handleResponse<CommentResponse[]>(fetch(url, { cache: "no-store" }));
+  const response = await handleResponse<CommentResponse[]>(await fetch(url, { cache: "no-store" }));
   return response.map((comment) => ({
     id: comment.id,
     version_id: comment.briefing_version_id,
@@ -207,7 +213,7 @@ export async function fetchComments(briefingId: string, versionId: string): Prom
 
 export async function fetchChatHistory(briefingId: string): Promise<ChatMessage[]> {
   const response = await handleResponse<ApiChatMessage[]>(
-    fetch(`${API_BASE}/briefings/${briefingId}/chat`, { cache: "no-store" })
+    await fetch(`${API_BASE}/briefings/${briefingId}/chat`, { cache: "no-store" })
   );
   return response.map((message) => ({
     id: message.id,

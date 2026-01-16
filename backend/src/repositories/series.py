@@ -14,8 +14,13 @@ def search_series(topic: Optional[str], query_text: Optional[str], limit: int = 
     params: List[Any] = []
 
     if topic:
-        query += " AND (metadata->>'category') = %s"
-        params.append(topic)
+        query += """
+            AND (
+                LOWER(COALESCE(metadata->>'category', metadata->>'topic')) = LOWER(%s)
+                OR LOWER(slug) = LOWER(%s)
+            )
+        """
+        params.extend([topic, topic])
 
     if query_text:
         query += " AND (slug ILIKE %s OR description ILIKE %s)"

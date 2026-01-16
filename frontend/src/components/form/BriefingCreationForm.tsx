@@ -42,7 +42,7 @@ export function BriefingCreationForm({ onSubmit, isLoading }: BriefingCreationFo
   const { selectedSeries, toggleSeriesSelection, clearSelectedSeries } = useBriefingStore();
 
   const [formData, setFormData] = useState<BriefingFormData>({
-    topic: "",
+    topic: "all",
     userRequest: "",
     asOf: "latest",
     lookbackPeriods: 24,
@@ -60,15 +60,18 @@ export function BriefingCreationForm({ onSubmit, isLoading }: BriefingCreationFo
 
   // Load series when topic changes
   useEffect(() => {
-    if (formData.topic) {
-      setIsLoadingSeries(true);
-      clearSelectedSeries();
-      getSeries(formData.topic, seriesSearch)
-        .then(setAvailableSeries)
-        .catch(() => setAvailableSeries([]))
-        .finally(() => setIsLoadingSeries(false));
-    }
+    setIsLoadingSeries(true);
+    getSeries(formData.topic === "all" ? undefined : formData.topic, seriesSearch || undefined)
+      .then(setAvailableSeries)
+      .catch(() => setAvailableSeries([]))
+      .finally(() => setIsLoadingSeries(false));
   }, [formData.topic, seriesSearch]);
+
+  useEffect(() => {
+    clearSelectedSeries();
+  }, [formData.topic, clearSelectedSeries]);
+
+  const topicOptions = ["all", ...topics.filter((topic, index, arr) => arr.indexOf(topic) === index)];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,9 +96,9 @@ export function BriefingCreationForm({ onSubmit, isLoading }: BriefingCreationFo
             <SelectValue placeholder="Select a topic" />
           </SelectTrigger>
           <SelectContent>
-            {topics.map((topic) => (
+            {topicOptions.map((topic) => (
               <SelectItem key={topic} value={topic}>
-                <span className="capitalize">{topic}</span>
+                {topic === "all" ? "All categories" : <span className="capitalize">{topic}</span>}
               </SelectItem>
             ))}
           </SelectContent>
@@ -103,94 +106,102 @@ export function BriefingCreationForm({ onSubmit, isLoading }: BriefingCreationFo
       </div>
 
       {/* Series Explorer */}
-      {formData.topic && (
-        <div className="space-y-3 animate-fade-in">
-          <Label>Data Series (Optional)</Label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search series..."
-              value={seriesSearch}
-              onChange={(e) => setSeriesSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+      <div className="space-y-3 animate-fade-in">
+        <Label>Data Series (Optional)</Label>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search series..."
+            value={seriesSearch}
+            onChange={(e) => setSeriesSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
 
-          {/* Selected Series */}
-          {selectedSeries.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {selectedSeries.map((series) => (
-                <Badge
-                  key={`${series.source}:${series.source_series_id}`}
-                  variant="secondary"
-                  className="flex items-center gap-1"
+        {/* Selected Series */}
+        {selectedSeries.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {selectedSeries.map((series) => (
+              <Badge
+                key={`${series.source}:${series.source_series_id}`}
+                variant="secondary"
+                className="flex items-center gap-1"
+              >
+                {series.name}
+                <button
+                  type="button"
+                  onClick={() => toggleSeriesSelection(series)}
+                  className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
                 >
-                  {series.name}
-                  <button
-                    type="button"
-                    onClick={() => toggleSeriesSelection(series)}
-                    className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          )}
+                  <X className="w-3 h-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
 
-          {/* Available Series */}
-          <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
-            {isLoadingSeries ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                Loading series...
-              </div>
-            ) : availableSeries.length === 0 ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                No series found
-              </div>
-            ) : (
-              availableSeries.map((series) => {
-                const selected = isSeriesSelected(series);
-                return (
-                  <button
-                    key={`${series.source}:${series.source_series_id}`}
-                    type="button"
-                    onClick={() => toggleSeriesSelection(series)}
+        {/* Available Series */}
+        <div className="max-h-64 overflow-y-auto border rounded-lg divide-y">
+          {isLoadingSeries ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              Loading series...
+            </div>
+          ) : availableSeries.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              No series found for this filter. Confirm the metadata category in
+              <code className="mx-1 font-mono text-xs">economic_data_sources.metadata-&gt;&gt;'category'</code>{" "}
+              matches “{formData.topic}” or clear the filter.
+            </div>
+          ) : (
+            availableSeries.map((series) => {
+              const selected = isSeriesSelected(series);
+              return (
+                <button
+                  key={`${series.source}:${series.source_series_id}`}
+                  type="button"
+                  onClick={() => toggleSeriesSelection(series)}
+                  className={cn(
+                    "w-full text-left p-3 hover:bg-muted/50 transition-colors flex items-start gap-3",
+                    selected && "bg-accent/10"
+                  )}
+                >
+                  <div
                     className={cn(
-                      "w-full text-left p-3 hover:bg-muted/50 transition-colors flex items-start gap-3",
-                      selected && "bg-accent/10"
+                      "w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center mt-0.5",
+                      selected
+                        ? "bg-accent border-accent text-accent-foreground"
+                        : "border-input"
                     )}
                   >
-                    <div
-                      className={cn(
-                        "w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center mt-0.5",
-                        selected
-                          ? "bg-accent border-accent text-accent-foreground"
-                          : "border-input"
-                      )}
-                    >
-                      {selected && <Check className="w-3 h-3" />}
+                    {selected && <Check className="w-3 h-3" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm truncate">{series.name}</div>
+                    <div className="text-xs text-muted-foreground flex flex-col gap-0.5 mt-0.5">
+                      <span className="font-mono">
+                        {series.source}:{series.source_series_id}
+                      </span>
+                      <span>
+                        Dataset: {series.dataset_code ?? series.dataset_id ?? "—"} · Frequency:{" "}
+                        {series.freq ?? "—"} · Unit: {series.unit ?? "—"}
+                      </span>
+                      <span>
+                        Location: {series.location ?? "—"} · Subject: {series.subject ?? "—"} · Measure:{" "}
+                        {series.measure ?? "—"}
+                      </span>
+                      <span>
+                        Slug: <code className="font-mono">{series.slug}</code> · Window:{" "}
+                        {series.time_filter ?? "default"}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm truncate">{series.name}</div>
-                      <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                        <span className="font-mono">{series.source_series_id}</span>
-                        <span>•</span>
-                        <span>{series.source}</span>
-                        <span>•</span>
-                        <span>{series.freq ?? "—"}</span>
-                        <span>•</span>
-                        <span>{series.unit ?? "—"}</span>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
         </div>
-      )}
-
+      </div>
+      
       {/* User Request */}
       <div className="space-y-2">
         <Label htmlFor="userRequest">Request</Label>

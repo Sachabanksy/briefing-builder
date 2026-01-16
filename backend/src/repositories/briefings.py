@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from psycopg2.extras import Json
+
 from src.database import db
 
 
@@ -54,9 +56,9 @@ def insert_version(
                 briefing_id,
                 version_number,
                 created_by,
-                input_spec,
-                data_pack,
-                content_json,
+                Json(input_spec),
+                Json(data_pack),
+                Json(content_json),
                 change_summary,
             ),
         )
