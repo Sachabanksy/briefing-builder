@@ -1,5 +1,6 @@
 import type {
   BriefingDetail,
+  BriefingRecord,
   BriefingResponse,
   ChatMessage,
   ChatResponse,
@@ -145,6 +146,12 @@ export async function getBriefingDetail(briefingId: string): Promise<BriefingDet
   return handleResponse<BriefingDetail>(
     await fetch(`${API_BASE}/briefings/${briefingId}`, { cache: "no-store" })
   );
+}
+
+export async function listBriefings(limit = 50): Promise<BriefingRecord[]> {
+  const url = new URL(`${API_BASE}/briefings`);
+  url.searchParams.set("limit", String(limit));
+  return handleResponse<BriefingRecord[]>(await fetch(url, { cache: "no-store" }));
 }
 
 export async function getBriefingVersion(

@@ -90,3 +90,13 @@ class BriefingChatMessage(BaseModel):
     role: str
     message: str
     version_id: Optional[str] = None
+
+
+class BriefingSummary(BaseModel):
+    id: str
+    title: str
+    topic: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    latest_version_id: Optional[str] = None

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FileText,
   Download,
@@ -7,16 +7,18 @@ import {
   MessageCircle,
   Loader2,
   Plus,
+  FolderOpen,
+  RefreshCw,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "./ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "./ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import {
   Sheet,
   SheetContent,
@@ -24,7 +26,7 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet";
+} from "./ui/sheet";
 import { DocumentViewer } from "@/components/document/DocumentViewer";
 import { DocumentSkeleton } from "@/components/document/DocumentSkeleton";
 import { ChatPanel } from "@/components/panel/ChatPanel";
@@ -39,13 +41,21 @@ import {
   getBriefingVersion,
   fetchComments,
   fetchChatHistory,
+  listBriefings,
 } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import type { Tone, Length } from "@/types/briefing";
+import type { Tone, Length, BriefingRecord } from "@/types/briefing";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { format } from "date-fns";
 
 export function BriefingBuilder() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isBrowseOpen, setIsBrowseOpen] = useState(false);
   const [isLoadingVersion, setIsLoadingVersion] = useState(false);
+  const [savedBriefings, setSavedBriefings] = useState<BriefingRecord[]>([]);
+  const [loadingBriefings, setLoadingBriefings] = useState(false);
+  const [loadingExistingId, setLoadingExistingId] = useState<string | null>(null);
+  const [shouldReloadBriefings, setShouldReloadBriefings] = useState(true);
   const { toast } = useToast();
 
   const {
@@ -63,6 +73,27 @@ export function BriefingBuilder() {
     setComments,
     setChatMessages,
   } = useBriefingStore();
+
+  useEffect(() => {
+    if (!isBrowseOpen) {
+      return;
+    }
+    if (!shouldReloadBriefings && savedBriefings.length > 0) {
+      return;
+    }
+    void refreshSavedBriefings();
+  }, [isBrowseOpen, shouldReloadBriefings]);
+
+  const refreshSavedBriefings = async () => {
+    setLoadingBriefings(true);
+    try {
+      const records = await listBriefings().catch(() => []);
+      setSavedBriefings(records);
+      setShouldReloadBriefings(false);
+    } finally {
+      setLoadingBriefings(false);
+    }
+  };
 
   const handleCreateBriefing = async (data: {
     topic: string;
@@ -118,6 +149,7 @@ export function BriefingBuilder() {
         title: "Briefing generated",
         description: "Your economic briefing is ready for review.",
       });
+      setShouldReloadBriefings(true);
     } catch (error) {
       toast({
         title: "Generation failed",
@@ -186,6 +218,41 @@ export function BriefingBuilder() {
     }
   };
 
+  const handleLoadBriefing = async (briefingId: string) => {
+    setLoadingExistingId(briefingId);
+    setIsLoadingVersion(true);
+    try {
+      const detail = await getBriefingDetail(briefingId);
+      const versions = detail.versions;
+      const latestVersionId = detail.briefing.latest_version_id || versions[0]?.id;
+      if (!latestVersionId) {
+        throw new Error("No versions available for this briefing.");
+      }
+      const [version, comments, chatHistory] = await Promise.all([
+        getBriefingVersion(briefingId, latestVersionId),
+        fetchComments(briefingId, latestVersionId).catch(() => []),
+        fetchChatHistory(briefingId).catch(() => []),
+      ]);
+      setBriefing(briefingId, latestVersionId, version.content_json, versions);
+      setComments(comments);
+      setChatMessages(chatHistory);
+      setIsBrowseOpen(false);
+      toast({
+        title: "Briefing loaded",
+        description: detail.briefing.title,
+      });
+    } catch (error) {
+      toast({
+        title: "Unable to load briefing",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingExistingId(null);
+      setIsLoadingVersion(false);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Bar */}
@@ -215,6 +282,86 @@ export function BriefingBuilder() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Sheet open={isBrowseOpen} onOpenChange={(open) => setIsBrowseOpen(open)}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm">
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Browse Briefings
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-[480px] sm:max-w-[480px] flex flex-col">
+              <SheetHeader>
+                <SheetTitle>Saved Briefings</SheetTitle>
+                <SheetDescription>Select a briefing to revisit or continue editing.</SheetDescription>
+              </SheetHeader>
+              <div className="flex items-center justify-between mt-4 mb-2">
+                <p className="text-sm text-muted-foreground">
+                  {savedBriefings.length} briefing{savedBriefings.length === 1 ? "" : "s"}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShouldReloadBriefings(true);
+                    void refreshSavedBriefings();
+                  }}
+                  disabled={loadingBriefings}
+                >
+                  <RefreshCw className={`w-4 h-4 mr-2 ${loadingBriefings ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
+              <ScrollArea className="flex-1">
+                {loadingBriefings ? (
+                  <div className="flex items-center justify-center h-40 text-muted-foreground">
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Loading briefings...
+                  </div>
+                ) : savedBriefings.length === 0 ? (
+                  <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">
+                    No briefings found yet.
+                  </div>
+                ) : (
+                  <div className="space-y-3 pb-6">
+                    {savedBriefings.map((briefing) => (
+                      <div key={briefing.id} className="p-3 border rounded-lg bg-card shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h4 className="font-semibold text-sm">{briefing.title}</h4>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Topic: <span className="capitalize">{briefing.topic}</span> ·{" "}
+                              {briefing.status ?? "draft"}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Created {format(new Date(briefing.created_at), "dd MMM yyyy HH:mm")}
+                              {briefing.updated_at
+                                ? ` · Updated ${format(new Date(briefing.updated_at), "dd MMM yyyy HH:mm")}`
+                                : ""}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => void handleLoadBriefing(briefing.id)}
+                            disabled={loadingExistingId === briefing.id}
+                          >
+                            {loadingExistingId === briefing.id ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Opening...
+                              </>
+                            ) : (
+                              "Open"
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </SheetContent>
+          </Sheet>
           <Sheet open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <SheetTrigger asChild>
               <Button variant={briefingId ? "outline" : "default"} size="sm">

@@ -151,3 +151,15 @@ def list_chat_messages(briefing_id: str, limit: int = 200) -> list[Dict[str, Any
     with db.get_cursor() as cursor:
         cursor.execute(query, (briefing_id, limit))
         return cursor.fetchall()
+
+
+def list_briefings(limit: int = 50) -> list[Dict[str, Any]]:
+    query = """
+        SELECT id, title, topic, status, created_at, updated_at, latest_version_id
+        FROM briefings
+        ORDER BY created_at DESC
+        LIMIT %s
+    """
+    with db.get_cursor() as cursor:
+        cursor.execute(query, (limit,))
+        return cursor.fetchall()
