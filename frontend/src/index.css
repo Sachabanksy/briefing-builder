@@ -1,0 +1,314 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Economic Briefing Builder Design System
+   Professional government document aesthetic with modern touches */
+
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  :root {
+    /* Core document colors - professional navy palette */
+    --background: 210 20% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary: Deep Navy - official, trustworthy */
+    --primary: 222 47% 15%;
+    --primary-foreground: 210 40% 98%;
+
+    /* Secondary: Slate blue for subtle UI */
+    --secondary: 215 25% 94%;
+    --secondary-foreground: 222 47% 20%;
+
+    --muted: 215 20% 93%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent: Refined blue for interactive elements */
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.375rem;
+
+    /* Quality status colors */
+    --status-green: 142 71% 45%;
+    --status-green-bg: 142 76% 95%;
+    --status-amber: 38 92% 50%;
+    --status-amber-bg: 38 92% 95%;
+    --status-red: 0 72% 51%;
+    --status-red-bg: 0 72% 95%;
+
+    /* Document-specific tokens */
+    --document-bg: 0 0% 100%;
+    --document-shadow: 222 47% 11% / 0.08;
+    --document-border: 220 13% 92%;
+    --classification-official: 222 47% 15%;
+    --classification-bg: 38 92% 50%;
+
+    /* Page dimensions (A4 at 96 DPI) */
+    --page-width: 210mm;
+    --page-min-height: 297mm;
+    --page-margin: 20mm;
+
+    /* Typography */
+    --font-serif: 'Source Serif 4', Georgia, serif;
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Sidebar */
+    --sidebar-background: 215 25% 97%;
+    --sidebar-foreground: 222 47% 20%;
+    --sidebar-primary: 222 47% 15%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 91% 60%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217 91% 60%;
+
+    /* Chat panel */
+    --chat-user-bg: 217 91% 60%;
+    --chat-user-fg: 0 0% 100%;
+    --chat-assistant-bg: 215 25% 94%;
+    --chat-assistant-fg: 222 47% 15%;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 210 40% 96%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+
+    --document-bg: 222 47% 13%;
+    --document-shadow: 0 0% 0% / 0.3;
+    --document-border: 217 33% 20%;
+
+    --sidebar-background: 222 47% 10%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 20%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 217 33% 20%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+
+  /* Document typography */
+  .document-prose {
+    font-family: var(--font-serif);
+  }
+
+  .document-prose h1 {
+    @apply text-2xl font-semibold tracking-tight mb-4;
+    font-family: var(--font-sans);
+  }
+
+  .document-prose h2 {
+    @apply text-lg font-semibold tracking-tight mb-3 mt-6;
+    font-family: var(--font-sans);
+  }
+
+  .document-prose h3 {
+    @apply text-base font-semibold mb-2 mt-4;
+    font-family: var(--font-sans);
+  }
+
+  .document-prose p {
+    @apply leading-relaxed mb-3;
+    font-size: 11pt;
+  }
+
+  .document-prose ul, .document-prose ol {
+    @apply mb-3 pl-5;
+  }
+
+  .document-prose li {
+    @apply mb-1.5 leading-relaxed;
+    font-size: 11pt;
+  }
+}
+
+@layer components {
+  /* A4 Page styling */
+  .a4-page {
+    width: var(--page-width);
+    min-height: var(--page-min-height);
+    padding: var(--page-margin);
+    background: hsl(var(--document-bg));
+    box-shadow: 0 4px 24px hsl(var(--document-shadow)), 0 0 0 1px hsl(var(--document-border));
+    margin: 2rem auto;
+    position: relative;
+  }
+
+  /* Classification label */
+  .classification-label {
+    @apply inline-block px-3 py-1 text-xs font-semibold tracking-widest uppercase;
+    background: hsl(var(--classification-bg));
+    color: hsl(var(--classification-official));
+  }
+
+  /* Quality banner variants */
+  .quality-banner-green {
+    background: hsl(var(--status-green-bg));
+    border-left: 4px solid hsl(var(--status-green));
+  }
+
+  .quality-banner-amber {
+    background: hsl(var(--status-amber-bg));
+    border-left: 4px solid hsl(var(--status-amber));
+  }
+
+  .quality-banner-red {
+    background: hsl(var(--status-red-bg));
+    border-left: 4px solid hsl(var(--status-red));
+  }
+
+  /* Data table styling */
+  .data-table {
+    @apply w-full text-sm border-collapse;
+  }
+
+  .data-table th {
+    @apply text-left font-semibold py-2 px-3 border-b-2 border-border;
+    font-family: var(--font-sans);
+    font-size: 10pt;
+  }
+
+  .data-table td {
+    @apply py-2 px-3 border-b border-border/50;
+    font-family: var(--font-mono);
+    font-size: 10pt;
+  }
+
+  .data-table tr:nth-child(even) {
+    @apply bg-muted/30;
+  }
+
+  .data-table td.numeric {
+    @apply text-right tabular-nums;
+  }
+
+  /* Callout variants */
+  .callout-info {
+    @apply bg-accent/10 border-l-4 border-accent p-4 rounded-r;
+  }
+
+  .callout-warning {
+    background: hsl(var(--status-amber-bg));
+    border-left: 4px solid hsl(var(--status-amber));
+    @apply p-4 rounded-r;
+  }
+
+  .callout-success {
+    background: hsl(var(--status-green-bg));
+    border-left: 4px solid hsl(var(--status-green));
+    @apply p-4 rounded-r;
+  }
+
+  /* Citation superscript */
+  .citation-ref {
+    @apply text-xs text-accent font-medium cursor-pointer hover:underline ml-0.5;
+    vertical-align: super;
+  }
+
+  /* Chat message bubbles */
+  .chat-message-user {
+    background: hsl(var(--chat-user-bg));
+    color: hsl(var(--chat-user-fg));
+    @apply rounded-2xl rounded-br-md px-4 py-2;
+  }
+
+  .chat-message-assistant {
+    background: hsl(var(--chat-assistant-bg));
+    color: hsl(var(--chat-assistant-fg));
+    @apply rounded-2xl rounded-bl-md px-4 py-2;
+  }
+
+  /* Comment anchor indicator */
+  .comment-anchor {
+    @apply absolute -right-2 -top-1 w-4 h-4 bg-accent text-accent-foreground rounded-full flex items-center justify-center text-xs cursor-pointer hover:scale-110 transition-transform;
+  }
+
+  /* Skeleton animation */
+  .skeleton-pulse {
+    @apply animate-pulse bg-muted rounded;
+  }
+}
+
+/* Print styles */
+@media print {
+  .a4-page {
+    box-shadow: none;
+    margin: 0;
+    page-break-after: always;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}

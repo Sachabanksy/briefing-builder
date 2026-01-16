@@ -1,13 +1,30 @@
 from __future__ import annotations
 
+import logging
+import os
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from src.database import db
-from src.economic_data_service import get_data_source_config, list_data_source_configs
+from src.economic_data_service import list_data_source_configs
+from src.repositories import series as series_repo
+from src.schemas.briefings import (
+    ChatRequest,
+    ChatResponse,
+    CommentCreateRequest,
+    CommentResponse,
+    CreateBriefingRequest,
+    CreateBriefingResponse,
+    BriefingChatMessage,
+    BriefingComment,
+    PdfExportRequest,
+)
+from src.services.briefing_service import BriefingService
+from src.services.data_pack_builder import build_data_pack
+from src.services.series_service import fetch_oecd_series, fetch_ons_series, resolve_series_by_slug
+from src.services.synthetic_data_service import seed_series_by_slug
 
 
 class EconomicSource(BaseModel):
@@ -35,6 +52,9 @@ class DataPoint(BaseModel):
     value: Optional[float] = None
     unit: Optional[str] = None
     measure: Optional[str] = None
+    subject: Optional[str] = None
+    location: Optional[str] = None
+    frequency: Optional[str] = None
     dimension: Optional[str] = None
     metadata: Optional[dict] = None
 
@@ -48,7 +68,19 @@ class SeriesResponse(BaseModel):
     data: List[DataPoint]
 
 
+class SeedSeriesRequest(BaseModel):
+    periods: int = Field(default=48, ge=12, le=240)
+    force: bool = Field(default=False)
+
+
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
 app = FastAPI(title="Economic Data API", version="0.1.0")
+briefing_service = BriefingService()
 
 app.add_middleware(
     CORSMiddleware,
@@ -150,6 +182,35 @@ def list_sources() -> List[EconomicSource]:
     return [EconomicSource(**config) for config in configs]
 
 
+@app.get("/series", response_model=List[EconomicSource])
+def search_series(
+    topic: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    limit: int = Query(25, ge=1, le=200),
+) -> List[EconomicSource]:
+    records = series_repo.search_series(topic, q, limit)
+    return [EconomicSource(**record) for record in records]
+
+
+@app.get("/series/{slug}", response_model=SeriesResponse)
+def get_series_by_slug(
+    slug: str,
+    limit: int = Query(120, ge=1, le=500),
+    start_period: Optional[str] = Query(None),
+    end_period: Optional[str] = Query(None),
+) -> SeriesResponse:
+    try:
+        result = resolve_series_by_slug(
+            slug,
+            limit=limit,
+            start_period=start_period,
+            end_period=end_period,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return SeriesResponse(**result)
+
+
 @app.get("/ons/series/{series_id}", response_model=List[DataPoint])
 def get_ons_series(
     series_id: str,
@@ -158,7 +219,7 @@ def get_ons_series(
     end_period: Optional[str] = Query(None),
     limit: int = Query(120, ge=1, le=500),
 ) -> List[DataPoint]:
-    data = _fetch_ons_series(
+    data = fetch_ons_series(
         series_id,
         dataset_id=dataset_id,
         start_period=start_period,
@@ -167,7 +228,7 @@ def get_ons_series(
     )
     if not data:
         raise HTTPException(status_code=404, detail="Series not found or no data available.")
-    return data
+    return [DataPoint(**row) for row in data]
 
 
 @app.get("/oecd/series", response_model=List[DataPoint])
@@ -181,7 +242,7 @@ def get_oecd_series(
     end_period: Optional[str] = Query(None),
     limit: int = Query(120, ge=1, le=500),
 ) -> List[DataPoint]:
-    data = _fetch_oecd_series(
+    data = fetch_oecd_series(
         dataset_code=dataset_code,
         location=location,
         subject=subject,
@@ -193,68 +254,140 @@ def get_oecd_series(
     )
     if not data:
         raise HTTPException(status_code=404, detail="Series not found or no data available.")
-    return data
+    return [DataPoint(**row) for row in data]
 
 
-@app.get("/series/{slug}", response_model=SeriesResponse)
-def get_series_by_slug(
-    slug: str,
-    limit: int = Query(120, ge=1, le=500),
-    start_period: Optional[str] = Query(None),
-    end_period: Optional[str] = Query(None),
-) -> SeriesResponse:
-    config = get_data_source_config(slug)
-    if not config:
-        raise HTTPException(status_code=404, detail=f"No configuration found for slug '{slug}'.")
-
-    provider = config["provider"]
-    if provider == "ONS":
-        dataset_id = config.get("dataset_id")
-        series_id = config.get("series_id")
-        if not series_id:
-            raise HTTPException(status_code=400, detail="ONS configuration missing series_id.")
-        metadata = config.get("metadata") or {}
-        if not metadata.get("resource_path"):
-            metadata["resource_path"] = None
-        data = _fetch_ons_series(
+@app.get("/timeseries", response_model=List[DataPoint])
+def get_timeseries(
+    source: str = Query(..., description="ONS or OECD"),
+    series_id: str = Query(..., description="Source-specific series identifier"),
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    limit: int = Query(240, ge=1, le=500),
+) -> List[DataPoint]:
+    source_upper = source.upper()
+    if source_upper == "ONS":
+        data = fetch_ons_series(
             series_id,
-            dataset_id=dataset_id,
-            start_period=start_period,
-            end_period=end_period,
+            dataset_id=None,
+            start_period=start,
+            end_period=end,
             limit=limit,
         )
-        return SeriesResponse(
-            slug=slug,
-            provider=provider,
-            dataset_id=dataset_id,
-            series_id=series_id,
-            data=data,
-        )
-
-    if provider == "OECD":
-        dataset_code = config.get("dataset_code")
-        location = config.get("location") or "GBR"
-        subject = config.get("subject") or ""
-        measure = config.get("measure") or ""
-        frequency = config.get("frequency") or ""
-        if not dataset_code or not subject or not measure or not frequency:
-            raise HTTPException(status_code=400, detail="OECD configuration is incomplete.")
-        data = _fetch_oecd_series(
-            dataset_code=dataset_code,
-            location=location,
-            subject=subject,
-            measure=measure,
-            frequency=frequency,
-            start_period=start_period,
-            end_period=end_period,
+    elif source_upper == "OECD":
+        config = series_repo.find_by_source("OECD", series_id)
+        if not config:
+            raise HTTPException(status_code=404, detail="Series not found.")
+        data = fetch_oecd_series(
+            dataset_code=config["dataset_code"],
+            location=config.get("location") or "GBR",
+            subject=config.get("subject") or "",
+            measure=config.get("measure") or "",
+            frequency=config.get("frequency") or "",
+            start_period=start,
+            end_period=end,
             limit=limit,
         )
-        return SeriesResponse(
-            slug=slug,
-            provider=provider,
-            dataset_code=dataset_code,
-            series_id=subject,
-            data=data,
-        )
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported source.")
 
-    raise HTTPException(status_code=400, detail=f"Unsupported provider '{provider}'.")
+    if not data:
+        raise HTTPException(status_code=404, detail="No data available.")
+    return [DataPoint(**row) for row in data]
+
+
+@app.post("/briefings", response_model=CreateBriefingResponse)
+def create_briefing(request: CreateBriefingRequest) -> CreateBriefingResponse:
+    try:
+        result = briefing_service.create_briefing(request=request, user_id="system_user")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return CreateBriefingResponse(**result)
+
+
+@app.get("/briefings/{briefing_id}")
+def get_briefing_detail(briefing_id: str) -> dict:
+    try:
+        return briefing_service.get_briefing_detail(briefing_id=briefing_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/briefings/{briefing_id}/versions/{version_id}")
+def get_briefing_version(briefing_id: str, version_id: str) -> dict:
+    try:
+        version = briefing_service.get_version(briefing_id=briefing_id, version_id=version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return version.model_dump()
+
+
+@app.post("/briefings/{briefing_id}/chat", response_model=ChatResponse)
+def chat_with_briefing(briefing_id: str, request: ChatRequest) -> ChatResponse:
+    try:
+        result = briefing_service.handle_chat(briefing_id=briefing_id, request=request, user_id="system_user")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ChatResponse(**result)
+
+
+@app.post("/briefings/{briefing_id}/comments", response_model=CommentResponse)
+def add_comment(briefing_id: str, request: CommentCreateRequest) -> CommentResponse:
+    try:
+        result = briefing_service.add_comment(briefing_id=briefing_id, comment_request=request, user_id="system_user")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return CommentResponse(**result)
+
+
+@app.get("/briefings/{briefing_id}/comments", response_model=List[BriefingComment])
+def list_comments(briefing_id: str, version_id: str = Query(...)) -> List[BriefingComment]:
+    try:
+        comments = briefing_service.list_comments(briefing_id=briefing_id, version_id=version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [BriefingComment(**comment) for comment in comments]
+
+
+@app.post("/briefings/{briefing_id}/export/pdf")
+def export_briefing_pdf(briefing_id: str, request: PdfExportRequest) -> Response:
+    try:
+        pdf_bytes = briefing_service.export_pdf(briefing_id=briefing_id, version_id=request.version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{briefing_id}.pdf"'},
+    )
+
+
+@app.get("/briefings/{briefing_id}/chat", response_model=List[BriefingChatMessage])
+def list_chat_messages(briefing_id: str) -> List[BriefingChatMessage]:
+    try:
+        messages = briefing_service.list_chat_messages(briefing_id=briefing_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [BriefingChatMessage(**message) for message in messages]
+
+
+@app.post("/series/{slug}/seed")
+def seed_series(slug: str, request: SeedSeriesRequest) -> dict:
+    try:
+        inserted = seed_series_by_slug(slug, periods=request.periods, force=request.force)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    status = "seeded" if inserted else "skipped"
+    return {"slug": slug, "inserted": inserted, "status": status, "force": request.force}
+
+
+@app.post("/data-packs/preview")
+def preview_data_pack(request: CreateBriefingRequest) -> dict:
+    if not request.selected_series:
+        raise HTTPException(status_code=400, detail="At least one series must be selected.")
+    data_pack = build_data_pack(
+        topic=request.topic,
+        selected_series=[series.dict() for series in request.selected_series],
+        options=request.options.dict(),
+    )
+    return data_pack
