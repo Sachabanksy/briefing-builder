@@ -1,12 +1,19 @@
 "use client";
 
-import { Fragment } from "react";
+import React, { Fragment, useMemo } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend } from "recharts";
 
 type Block = {
   type: "paragraph" | "bullets" | "callout" | "table" | "chart_spec";
   content: any;
-  citations?: { series_key: string; period_start: string; value: number; note?: string }[];
+  citations?: Citation[];
+};
+
+type Citation = {
+  series_key: string;
+  period_start: string;
+  value: number;
+  note?: string;
 };
 
 type Section = {
@@ -15,9 +22,33 @@ type Section = {
   blocks: Block[];
 };
 
-export default function BriefingRenderer({ content }: { content: any }) {
+type BriefingRendererProps = {
+  content: any;
+  selectedAnchor?: string | null;
+  onSelectAnchor?: (anchor: string) => void;
+};
+
+type Footnote = { index: number; citation: Citation };
+
+export default function BriefingRenderer({ content, selectedAnchor, onSelectAnchor }: BriefingRendererProps) {
   if (!content) return null;
   const sections: Section[] = content.sections ?? [];
+
+  const [footnotes, registerCitation] = useMemo(() => {
+    const notes: Footnote[] = [];
+    const cache = new Map<string, number>();
+    const register = (citation: Citation) => {
+      const key = JSON.stringify(citation);
+      if (!cache.has(key)) {
+        const nextIndex = notes.length + 1;
+        cache.set(key, nextIndex);
+        notes.push({ index: nextIndex, citation });
+      }
+      return cache.get(key)!;
+    };
+    return [notes, register] as const;
+  }, [content]);
+
   return (
     <div
       style={{
@@ -36,11 +67,18 @@ export default function BriefingRenderer({ content }: { content: any }) {
         }}
       >
         <header>
-          <p style={{ textTransform: "uppercase", color: "var(--muted)", marginBottom: 4 }}>
-            {content.briefing_meta?.topic}
-          </p>
-          <h1 style={{ margin: 0 }}>{content.briefing_meta?.title}</h1>
-          <p style={{ color: "var(--muted)" }}>As of {content.briefing_meta?.as_of}</p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <p style={{ textTransform: "uppercase", color: "var(--muted)", marginBottom: 4 }}>
+                {content.briefing_meta?.topic}
+              </p>
+              <h1 style={{ margin: 0 }}>{content.briefing_meta?.title}</h1>
+            </div>
+            <div style={{ textAlign: "right", color: "var(--muted)" }}>
+              <div>Ministerial Briefing</div>
+              <small>{content.briefing_meta?.as_of}</small>
+            </div>
+          </div>
         </header>
         <section
           style={{
@@ -53,15 +91,80 @@ export default function BriefingRenderer({ content }: { content: any }) {
         >
           <strong>Quality status: {content.quality_banner?.status?.toUpperCase()}</strong>
           <p>{content.quality_banner?.summary}</p>
+          <ul style={{ margin: "8px 0", paddingLeft: "18px" }}>
+            {(content.quality_banner?.checks ?? []).map((check: any) => (
+              <li key={check.name}>
+                <strong>{check.name}:</strong> {check.detail}
+              </li>
+            ))}
+          </ul>
         </section>
         {sections.map((section) => (
           <section key={section.id} id={section.id} style={{ marginBottom: "32px" }}>
-            <h2 style={{ color: "var(--primary)" }}>{section.title}</h2>
-            {section.blocks.map((block, idx) => (
-              <Fragment key={`${section.id}-${idx}`}>{renderBlock(block)}</Fragment>
-            ))}
+            <h2 style={{ color: "var(--primary)", borderBottom: "1px solid var(--border)", paddingBottom: "4px" }}>
+              {section.title}
+            </h2>
+            {section.blocks.map((block, idx) => {
+              const anchor = `${section.id}:block:${idx}`;
+              const isSelected = selectedAnchor === anchor;
+              return (
+                <Fragment key={`${section.id}-${idx}`}>
+                  <div
+                    data-anchor={anchor}
+                    style={{
+                      border: isSelected ? "1px solid #0f62fe" : "1px solid transparent",
+                      borderRadius: "6px",
+                      padding: "8px",
+                      marginBottom: "8px",
+                    }}
+                    onClick={() => onSelectAnchor?.(anchor)}
+                  >
+                    {renderBlock(block)}
+                    {block.citations?.length ? (
+                      <div style={{ fontSize: "12px", color: "var(--muted)" }}>
+                        {block.citations.map((citation, citationIdx) => {
+                          const index = registerCitation(citation);
+                          return (
+                            <sup key={`${anchor}-citation-${citationIdx}`} style={{ marginRight: "6px" }}>
+                              [{index}]
+                            </sup>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </div>
+                </Fragment>
+              );
+            })}
           </section>
         ))}
+
+        {content.recommended_charts?.length ? (
+          <section style={{ marginTop: "32px" }}>
+            <h2 style={{ color: "var(--primary)" }}>Recommended charts</h2>
+            <ul>
+              {content.recommended_charts.map((chart: any) => (
+                <li key={chart.chart_id}>
+                  {chart.title} ({chart.unit}) — {chart.series_keys.join(", ")}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {footnotes.length ? (
+          <section style={{ marginTop: "40px", fontSize: "12px" }}>
+            <h3>Citations</h3>
+            <ol style={{ paddingLeft: "18px" }}>
+              {footnotes.map((footnote) => (
+                <li key={footnote.index}>
+                  <strong>{footnote.citation.series_key}</strong> {footnote.citation.note} — {footnote.citation.value} (
+                  {footnote.citation.period_start})
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
       </article>
     </div>
   );

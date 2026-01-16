@@ -72,3 +72,21 @@ class CommentResponse(BaseModel):
 class PdfExportRequest(BaseModel):
     version_id: str
 
+
+class BriefingComment(BaseModel):
+    id: str
+    briefing_version_id: str
+    created_at: datetime
+    created_by: str
+    anchor: str
+    comment_text: str
+    status: str
+
+
+class BriefingChatMessage(BaseModel):
+    id: str
+    briefing_id: str
+    created_at: datetime
+    role: str
+    message: str
+    version_id: Optional[str] = None

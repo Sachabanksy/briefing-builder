@@ -183,3 +183,15 @@ class BriefingService:
                 for version in versions
             ],
         }
+
+    def list_comments(self, *, briefing_id: str, version_id: str) -> list[Dict[str, Any]]:
+        version = briefing_repo.get_version(briefing_id, version_id)
+        if not version:
+            raise ValueError("Version not found.")
+        return briefing_repo.list_comments(version_id)
+
+    def list_chat_messages(self, *, briefing_id: str) -> list[Dict[str, Any]]:
+        briefing = briefing_repo.get_briefing(briefing_id)
+        if not briefing:
+            raise ValueError("Briefing not found.")
+        return briefing_repo.list_chat_messages(briefing_id)

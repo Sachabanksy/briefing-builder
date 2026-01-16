@@ -124,3 +124,28 @@ def insert_comment(
     with db.get_cursor() as cursor:
         cursor.execute(query, (briefing_version_id, created_by, anchor, comment_text))
         return cursor.fetchone()
+
+
+def list_comments(briefing_version_id: str) -> list[Dict[str, Any]]:
+    query = """
+        SELECT *
+        FROM briefing_comments
+        WHERE briefing_version_id = %s
+        ORDER BY created_at ASC
+    """
+    with db.get_cursor() as cursor:
+        cursor.execute(query, (briefing_version_id,))
+        return cursor.fetchall()
+
+
+def list_chat_messages(briefing_id: str, limit: int = 200) -> list[Dict[str, Any]]:
+    query = """
+        SELECT *
+        FROM briefing_chat
+        WHERE briefing_id = %s
+        ORDER BY created_at ASC
+        LIMIT %s
+    """
+    with db.get_cursor() as cursor:
+        cursor.execute(query, (briefing_id, limit))
+        return cursor.fetchall()

@@ -4,11 +4,24 @@ import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import BriefingRenderer from "@/components/BriefingRenderer";
 import ChatPanel from "@/components/ChatPanel";
-import CommentsPanel, { Comment } from "@/components/CommentsPanel";
-import { downloadPdf, fetchBriefingDetail, fetchVersion, postComment, sendChat } from "@/lib/api";
+import CommentsPanel from "@/components/CommentsPanel";
+import VersionSidebar from "@/components/VersionSidebar";
+import {
+  ChatMessage,
+  BriefingComment,
+  downloadPdf,
+  fetchBriefingDetail,
+  fetchChatHistory,
+  fetchComments,
+  fetchVersion,
+  postComment,
+  sendChat,
+} from "@/lib/api";
 
 const detailFetcher = (briefingId: string) => fetchBriefingDetail(briefingId);
 const versionFetcher = (args: [string, string]) => fetchVersion(args[0], args[1]);
+const chatFetcher = (briefingId: string) => fetchChatHistory(briefingId);
+const commentsFetcher = (args: [string, string]) => fetchComments(args[0], args[1]);
 
 export default function BriefingPage({ params }: { params: { id: string } }) {
   const { data: detail, isLoading: detailLoading, mutate: refreshDetail } = useSWR(
@@ -16,12 +29,21 @@ export default function BriefingPage({ params }: { params: { id: string } }) {
     () => detailFetcher(params.id)
   );
   const [activeVersion, setActiveVersion] = useState<string | null>(null);
-  const { data: versionData } = useSWR(
+  const { data: versionData, mutate: refreshVersion } = useSWR(
     params.id && activeVersion ? [params.id, activeVersion] : null,
     (keys) => versionFetcher(keys as [string, string])
   );
-  const [messages, setMessages] = useState<{ id: string; role: "user" | "assistant"; content: string }[]>([]);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const { data: chatHistory, mutate: refreshChat } = useSWR(
+    params.id ? ["chat", params.id] : null,
+    () => chatFetcher(params.id)
+  );
+  const { data: commentsData, mutate: refreshComments } = useSWR(
+    params.id && activeVersion ? ["comments", params.id, activeVersion] : null,
+    (keys) => commentsFetcher(keys as [string, string])
+  );
+  const [selectedAnchor, setSelectedAnchor] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [optimisticMessages, setOptimisticMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
     if (!detail || !detail.versions.length || activeVersion) return;
@@ -29,23 +51,38 @@ export default function BriefingPage({ params }: { params: { id: string } }) {
   }, [detail, activeVersion]);
 
   const handleSend = async (text: string) => {
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "user", content: text }]);
-    const response = await sendChat(params.id, text, activeVersion ?? undefined);
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: "assistant", content: response.change_summary ?? "Updated." },
-    ]);
-    await refreshDetail();
-    setActiveVersion(response.new_version_id);
+    setIsSending(true);
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      message: text,
+      created_at: new Date().toISOString(),
+    };
+    setOptimisticMessages((prev) => [...prev, userMessage]);
+    try {
+      const response = await sendChat(params.id, text, activeVersion ?? undefined);
+      const assistantMessage: ChatMessage = {
+        id: response.new_version_id,
+        role: "assistant",
+        message: response.change_summary ?? "Updated.",
+        created_at: new Date().toISOString(),
+      };
+      setOptimisticMessages((prev) => [...prev, assistantMessage]);
+      await refreshDetail();
+      setActiveVersion(response.new_version_id);
+      await refreshVersion();
+      await refreshChat();
+    } finally {
+      setOptimisticMessages([]);
+      setIsSending(false);
+    }
   };
 
   const handleComment = async (anchor: string, text: string) => {
     if (!activeVersion) return;
     const response = await postComment(params.id, { version_id: activeVersion, anchor, comment_text: text });
-    setComments((prev) => [
-      ...prev,
-      { id: response.comment_id, anchor, comment_text: text, status: response.status },
-    ]);
+    setSelectedAnchor(anchor);
+    await refreshComments();
   };
 
   const handleDownload = async () => {
@@ -60,6 +97,11 @@ export default function BriefingPage({ params }: { params: { id: string } }) {
   };
 
   const renderModel = useMemo(() => versionData?.content_json ?? null, [versionData]);
+  const comments: BriefingComment[] = commentsData ?? [];
+  const messages: ChatMessage[] = useMemo(
+    () => ([...(chatHistory ?? []), ...optimisticMessages]),
+    [chatHistory, optimisticMessages]
+  );
 
   if (detailLoading) {
     return <p style={{ padding: "32px" }}>Loading briefing...</p>;
@@ -71,27 +113,25 @@ export default function BriefingPage({ params }: { params: { id: string } }) {
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 60px)" }}>
+      <VersionSidebar versions={detail.versions} activeVersionId={activeVersion} onSelect={setActiveVersion} />
       <div style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "16px 32px" }}>
-          <select
-            value={activeVersion ?? ""}
-            onChange={(event) => setActiveVersion(event.target.value)}
-            style={{ padding: "8px 12px" }}
-          >
-            {detail.versions.map((version) => (
-              <option key={version.id} value={version.id}>
-                Version {version.version_number}
-              </option>
-            ))}
-          </select>
           <button onClick={handleDownload} disabled={!activeVersion}>
             Download PDF
           </button>
+          <span style={{ color: "var(--muted)", fontSize: "14px" }}>
+            {activeVersion ? `Version ${detail.versions.find((v) => v.id === activeVersion)?.version_number}` : ""}
+          </span>
         </div>
-        <BriefingRenderer content={renderModel} />
-        <CommentsPanel comments={comments} onCreate={handleComment} />
+        <BriefingRenderer content={renderModel} selectedAnchor={selectedAnchor} onSelectAnchor={setSelectedAnchor} />
+        <CommentsPanel
+          comments={comments}
+          onCreate={handleComment}
+          onSelectAnchor={setSelectedAnchor}
+          selectedAnchor={selectedAnchor}
+        />
       </div>
-      <ChatPanel messages={messages} onSend={handleSend} />
+      <ChatPanel messages={messages} onSend={handleSend} pending={isSending} />
     </div>
   );
 }

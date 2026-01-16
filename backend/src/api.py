@@ -15,6 +15,8 @@ from src.schemas.briefings import (
     CommentResponse,
     CreateBriefingRequest,
     CreateBriefingResponse,
+    BriefingChatMessage,
+    BriefingComment,
     PdfExportRequest,
 )
 from src.services.briefing_service import BriefingService
@@ -323,6 +325,15 @@ def add_comment(briefing_id: str, request: CommentCreateRequest) -> CommentRespo
     return CommentResponse(**result)
 
 
+@app.get("/briefings/{briefing_id}/comments", response_model=List[BriefingComment])
+def list_comments(briefing_id: str, version_id: str = Query(...)) -> List[BriefingComment]:
+    try:
+        comments = briefing_service.list_comments(briefing_id=briefing_id, version_id=version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [BriefingComment(**comment) for comment in comments]
+
+
 @app.post("/briefings/{briefing_id}/export/pdf")
 def export_briefing_pdf(briefing_id: str, request: PdfExportRequest) -> Response:
     try:
@@ -334,3 +345,12 @@ def export_briefing_pdf(briefing_id: str, request: PdfExportRequest) -> Response
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{briefing_id}.pdf"'},
     )
+
+
+@app.get("/briefings/{briefing_id}/chat", response_model=List[BriefingChatMessage])
+def list_chat_messages(briefing_id: str) -> List[BriefingChatMessage]:
+    try:
+        messages = briefing_service.list_chat_messages(briefing_id=briefing_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [BriefingChatMessage(**message) for message in messages]

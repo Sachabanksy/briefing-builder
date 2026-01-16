@@ -5,15 +5,18 @@ import { FormEvent, useState } from "react";
 type Message = {
   id: string;
   role: "user" | "assistant";
-  content: string;
+  message: string;
+  created_at?: string;
 };
 
 export default function ChatPanel({
   messages,
   onSend,
+  pending: pendingExternal = false,
 }: {
   messages: Message[];
   onSend: (message: string) => Promise<void>;
+  pending?: boolean;
 }) {
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -26,6 +29,8 @@ export default function ChatPanel({
     setPending(false);
     setInput("");
   };
+
+  const isSending = pending || pendingExternal;
 
   return (
     <aside
@@ -53,7 +58,12 @@ export default function ChatPanel({
               maxWidth: "80%",
             }}
           >
-            {message.content}
+            <p style={{ margin: 0 }}>{message.message}</p>
+            {message.created_at ? (
+              <span style={{ fontSize: "10px", opacity: 0.8 }}>
+                {new Date(message.created_at).toLocaleTimeString()}
+              </span>
+            ) : null}
           </div>
         ))}
       </div>
@@ -65,8 +75,8 @@ export default function ChatPanel({
           placeholder="Ask for edits..."
           style={{ width: "100%", resize: "none" }}
         />
-        <button type="submit" disabled={pending} style={{ marginTop: "8px" }}>
-          {pending ? "Sending..." : "Send"}
+        <button type="submit" disabled={isSending} style={{ marginTop: "8px" }}>
+          {isSending ? "Sending..." : "Send"}
         </button>
       </form>
     </aside>
