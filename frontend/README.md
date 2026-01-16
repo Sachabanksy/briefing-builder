@@ -1,83 +1,55 @@
-# Welcome to your Lovable project
+# Economic Briefing Builder — Frontend
 
-## Project info
+SPA for creating, iterating, and browsing ministerial briefings. Built with Vite, React, TypeScript, Tailwind, and shadcn/ui.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Getting Started
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+cd frontend
+npm install
+cp .env.local.example .env.local   # create and edit if needed
+npm run dev                        # starts Vite on http://localhost:8080
 ```
 
-**Edit a file directly in GitHub**
+Ensure the FastAPI backend is running on http://localhost:8000 (or whichever URL you set in `.env.local`).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Environment variables
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## Configuration
-
-The frontend communicates with the FastAPI backend. Configure the API base URL via the `VITE_API_BASE` environment variable (defaults to `http://localhost:8000`). Create a `.env.local` file and add:
+The app uses `VITE_API_BASE` to talk to the backend. Defaults to `http://localhost:8000`.
 
 ```
 VITE_API_BASE=http://localhost:8000
 ```
 
-Restart `npm run dev` after changing environment variables.
+Restart `npm run dev` if you change this value.
 
-## How can I deploy this project?
+## Features
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+- **Create briefings** – use the form to pick data series, set tone/length/lookback, and submit. The backend seeds synthetic time-series data automatically if the database lacks a series.
+- **Browse saved briefings** – open the “Browse Briefings” drawer (top-left). Fetches `GET /briefings`, lets you refresh the list, and loads the selected briefing (with versions, chat history, comments) so you can continue editing.
+- **Chat-driven edits** – use the Chat tab to request revisions; each response creates a new version, which can be selected from the dropdown or Versions panel.
+- **Annotations and comments** – add inline comments in the rendered document; view them in the Comments panel.
+- **PDF export** – download the current version via the Export button (calls `/briefings/{id}/export/pdf`).
 
-## Can I connect a custom domain to my Lovable project?
+## Project structure
 
-Yes, you can!
+```
+src/
+  components/
+    BriefingBuilder.tsx      # main shell (creation, browsing, document viewer)
+    document/                # renderers (QualityBanner, SectionRenderer, etc.)
+    form/                    # BriefingCreationForm
+    panel/                   # Chat / Versions / Comments panels
+    ui/                      # shadcn primitives
+  pages/
+    Index.tsx                # routes to BriefingBuilder
+    NotFound.tsx
+  lib/api.ts                 # wrapper around backend endpoints
+  stores/briefingStore.ts    # Zustand store for app state
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Connecting to the backend
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+The frontend expects the backend’s containers running via `backend/docker-compose.yml` (which seeds synthetic data and exposes the API on port 8000). If you change ports or run locally outside Docker, update `VITE_API_BASE`.
+
+Backend docs and API reference live in `backend/README.md` and at http://localhost:8000/docs once the server is running.

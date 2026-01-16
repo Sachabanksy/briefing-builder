@@ -1,4 +1,4 @@
-# My Project
+# Economic Briefing Builder — Backend
 
 ## Prerequisites
 
@@ -13,12 +13,18 @@ git clone <your-repo-url>
 cd <project-directory>
 ```
 
-2. Start the application:
+2. Create a `.env` file in the `backend/` directory (see `.env.example`) and set:
+```
+OPENAI_API_KEY=sk-***
+```
+You can also override `LOG_LEVEL` (defaults to `INFO`) or any DB settings here.
+
+3. Start the application from the `backend/` directory:
 ```bash
 docker-compose up
 ```
 
-That's it! The database will be automatically created and initialized.
+The database schema is applied automatically and `scripts/seed_all_series.py` runs at startup to ensure every configured series has synthetic time series data. Uvicorn then serves the FastAPI app on http://localhost:8000.
 
 ## Development
 
@@ -88,30 +94,22 @@ docker-compose exec app alembic upgrade head
 docker-compose exec app alembic downgrade -1
 ```
 
-## Troubleshooting
+## FastAPI service
 
-### Port already in use
-If port 5432 is already in use, edit `docker-compose.yml` and change:
-```yaml
-ports:
-  - "5433:5432"  # Use 5433 on host instead
-```
+Key endpoints (see http://localhost:8000/docs for the full list):
 
-### Fresh database needed
-```bash
-docker-compose down -v
-docker-compose up
-```
+- `GET /health` – readiness check.
+- `GET /sources` – enabled economic data configurations.
+- `GET /series`, `GET /series/{slug}`, `GET /ons/series/{series_id}`, `GET /oecd/series`, `GET /timeseries` – raw timeseries lookups.
+- `POST /series/{slug}/seed` – force synthetic data generation for a specific slug (helpful after editing config metadata).
+- `POST /data-packs/preview` – run the same data-pack builder used for LLM prompting without creating a briefing.
+- `POST /briefings` – create and store a briefing (LLM-backed).
+- `GET /briefings` – list saved briefings (used by the frontend “Browse Briefings” drawer).
+- `GET /briefings/{id}` / `/versions/{version_id}` / `/chat` / `/comments` – retrieve stored content for editing/review.
+- `POST /briefings/{id}/chat` – iterative editing.
+- `POST /briefings/{id}/export/pdf` – PDF export.
 
-### See what's running
-```bash
-docker-compose ps
-```
-
-### View resource usage
-```bash
-docker stats
-```
+If `OPENAI_API_KEY` is unset or the OpenAI client fails, the backend logs a warning and falls back to a deterministic stub so the rest of the workflow remains functional.
 
 ## Economic Data Fetchers
 
@@ -146,18 +144,6 @@ docker-compose exec app python scripts/seed_economic_data.py
 
 The script upserts lookup entries (`fake_ons_cpi`, `fake_oecd_cli`) and generates time-series values so the rest of the app has realistic data without calling external APIs.
 
-### FastAPI service
-
-The backend exposes a FastAPI app (served via Uvicorn on port 8000). Once `docker-compose up` is running you can hit:
-
-- `GET /health` – readiness check.
-- `GET /sources` – all enabled lookup records.
-- `GET /ons/series/{series_id}` – pull ONS observations with optional `dataset_id`, `start_period`, `end_period`, and `limit`.
-- `GET /oecd/series` – provide `dataset_code`, `location`, `subject`, `measure`, `frequency` to query OECD rows.
-- `GET /series/{slug}` – hydrate any configured slug (e.g., `fake_ons_cpi`, `fake_oecd_cli`) and return its data.
-
-Interactive docs live at [http://localhost:8000/docs](http://localhost:8000/docs).
-
 ## Project Structure
 ```
 .
@@ -169,17 +155,22 @@ Interactive docs live at [http://localhost:8000/docs](http://localhost:8000/docs
 │   └── init/
 │       ├── 01-schema.sql
 │       └── 02-seed.sql
+├── scripts/
+│   ├── seed_all_series.py        # ensures every config has timeseries data at startup
+│   └── seed_economic_data.py     # optional synthetic CPI/CLI seeding
 └── src/
-    ├── database.py
-    └── models.py
+    ├── api.py                    # FastAPI app + routes
+    ├── services/                 # briefing/data-pack/LLM/series helpers
+    ├── repositories/             # DB access layers
+    └── schemas/                  # pydantic models
 ```
 
 ## Environment Variables
 
-The application uses these environment variables (set in docker-compose.yml):
+Set either in `backend/.env` or via your shell before running docker-compose:
 
-- `DB_HOST`: Database hostname (default: db)
-- `DB_NAME`: Database name (default: myproject_dev)
-- `DB_USER`: Database user (default: devuser)
-- `DB_PASSWORD`: Database password (default: devpass123)
-- `DB_PORT`: Database port (default: 5432)
+- `OPENAI_API_KEY` *(required)* – OpenAI API key for the briefing generator.
+- `LOG_LEVEL` *(optional)* – Python logging level (`INFO`, `DEBUG`, etc.).
+- `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT` – override defaults if needed.
+
+> The frontend expects the backend at http://localhost:8000 by default. Update `VITE_API_BASE` in `frontend/.env.local` if you change ports.
