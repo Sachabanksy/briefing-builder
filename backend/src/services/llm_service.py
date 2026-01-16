@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from hashlib import sha256
+import logging
 from typing import Any, Dict, Optional
 
 from cachetools import TTLCache
@@ -18,8 +19,11 @@ You are a briefing-drafting assistant for economic policy. You must produce conc
 """
 
 
+logger = logging.getLogger(__name__)
+
+
 class LLMService:
-    def __init__(self, *, model: str = "gpt-4o-mini", cache_ttl_seconds: int = 600) -> None:
+    def __init__(self, *, model: str = "gpt-4.1-mini", cache_ttl_seconds: int = 600) -> None:
         self.model = model
         api_key = os.getenv("OPENAI_API_KEY")
         self.client = OpenAI(api_key=api_key) if OpenAI and api_key else None
@@ -71,17 +75,36 @@ Return JSON with this schema:
 
     def _call_model(self, *, user_prompt: str) -> Dict[str, Any]:
         if not self.client:
+            logger.warning("LLM client unavailable – falling back to deterministic response.")
             return self._fallback_response(user_prompt=user_prompt)
 
-        response = self.client.responses.create(  # type: ignore[attr-defined]
-            model=self.model,
-            temperature=0,
-            system=SYSTEM_PROMPT,
-            response_format={"type": "json_object"},
-            input=user_prompt,
-        )
-        content = response.output[0].content[0].text  # type: ignore[index]
-        return json.loads(content)
+        try:
+            logger.info("LLM prompt: %s", user_prompt)
+            if hasattr(self.client, "responses"):
+                response = self.client.responses.create(  # type: ignore[attr-defined]
+                    model=self.model,
+                    temperature=0,
+                    system=SYSTEM_PROMPT,
+                    response_format={"type": "json_object"},
+                    input=user_prompt,
+                )
+                content = response.output[0].content[0].text  # type: ignore[index]
+            else:
+                completion = self.client.chat.completions.create(  # type: ignore[attr-defined]
+                    model=self.model,
+                    temperature=0,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                )
+                content = completion.choices[0].message.content  # type: ignore[index]
+            logger.info("LLM raw response: %s", content)
+            return json.loads(content or "{}")
+        except Exception as exc:  # pragma: no cover - diagnostics path
+            logger.exception("LLM call failed – using fallback. Error: %s", exc)
+            return self._fallback_response(user_prompt=user_prompt)
 
     def _fallback_response(self, *, user_prompt: str) -> Dict[str, Any]:
         # Deterministic placeholder used when no LLM credentials are configured.

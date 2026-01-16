@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import logging
+import os
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.economic_data_service import list_data_source_configs
 from src.repositories import series as series_repo
@@ -20,7 +22,9 @@ from src.schemas.briefings import (
     PdfExportRequest,
 )
 from src.services.briefing_service import BriefingService
+from src.services.data_pack_builder import build_data_pack
 from src.services.series_service import fetch_oecd_series, fetch_ons_series, resolve_series_by_slug
+from src.services.synthetic_data_service import seed_series_by_slug
 
 
 class EconomicSource(BaseModel):
@@ -63,6 +67,17 @@ class SeriesResponse(BaseModel):
     series_id: Optional[str] = None
     data: List[DataPoint]
 
+
+class SeedSeriesRequest(BaseModel):
+    periods: int = Field(default=48, ge=12, le=240)
+    force: bool = Field(default=False)
+
+
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.INFO),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 app = FastAPI(title="Economic Data API", version="0.1.0")
 briefing_service = BriefingService()
@@ -354,3 +369,25 @@ def list_chat_messages(briefing_id: str) -> List[BriefingChatMessage]:
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [BriefingChatMessage(**message) for message in messages]
+
+
+@app.post("/series/{slug}/seed")
+def seed_series(slug: str, request: SeedSeriesRequest) -> dict:
+    try:
+        inserted = seed_series_by_slug(slug, periods=request.periods, force=request.force)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    status = "seeded" if inserted else "skipped"
+    return {"slug": slug, "inserted": inserted, "status": status, "force": request.force}
+
+
+@app.post("/data-packs/preview")
+def preview_data_pack(request: CreateBriefingRequest) -> dict:
+    if not request.selected_series:
+        raise HTTPException(status_code=400, detail="At least one series must be selected.")
+    data_pack = build_data_pack(
+        topic=request.topic,
+        selected_series=[series.dict() for series in request.selected_series],
+        options=request.options.dict(),
+    )
+    return data_pack

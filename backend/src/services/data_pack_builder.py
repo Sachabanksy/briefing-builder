@@ -10,6 +10,7 @@ from dateutil import parser
 
 from src.repositories import series as series_repo
 from src.services import series_service
+from src.services.synthetic_data_service import seed_series_by_config
 
 
 FREQUENCY_TO_PERIODS = {"M": 12, "Q": 4, "A": 1}
@@ -146,6 +147,16 @@ def build_data_pack(
                 end_period=None,
                 limit=limit,
             )
+            if not rows:
+                seeded = seed_series_by_config(config, periods=lookback_periods + 4, force=False)
+                if seeded:
+                    rows = series_service.fetch_ons_series(
+                        config["series_id"],
+                        dataset_id=dataset_id,
+                        start_period=None,
+                        end_period=None,
+                        limit=limit,
+                    )
         elif provider == "OECD":
             rows = series_service.fetch_oecd_series(
                 dataset_code=config["dataset_code"],
@@ -157,6 +168,19 @@ def build_data_pack(
                 end_period=None,
                 limit=limit,
             )
+            if not rows:
+                seeded = seed_series_by_config(config, periods=lookback_periods + 4, force=False)
+                if seeded:
+                    rows = series_service.fetch_oecd_series(
+                        dataset_code=config["dataset_code"],
+                        location=config.get("location") or "GBR",
+                        subject=config.get("subject") or "",
+                        measure=config.get("measure") or "",
+                        frequency=config.get("frequency") or "",
+                        start_period=None,
+                        end_period=None,
+                        limit=limit,
+                    )
         else:
             limitations.append(f"Provider {provider} not supported in data pack.")
             continue
