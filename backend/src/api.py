@@ -20,6 +20,7 @@ from src.schemas.briefings import (
     BriefingChatMessage,
     BriefingComment,
     PdfExportRequest,
+    BriefingSummary,
 )
 from src.services.briefing_service import BriefingService
 from src.services.data_pack_builder import build_data_pack
@@ -303,6 +304,12 @@ def create_briefing(request: CreateBriefingRequest) -> CreateBriefingResponse:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return CreateBriefingResponse(**result)
+
+
+@app.get("/briefings", response_model=List[BriefingSummary])
+def list_briefings(limit: int = Query(50, ge=1, le=200)) -> List[BriefingSummary]:
+    records = briefing_service.list_briefings(limit=limit)
+    return [BriefingSummary(**record) for record in records]
 
 
 @app.get("/briefings/{briefing_id}")

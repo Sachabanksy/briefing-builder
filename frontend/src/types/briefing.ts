@@ -188,8 +188,10 @@ export interface BriefingRecord {
   id: string;
   title: string;
   topic: string;
+  status?: string;
   created_at: string;
-  created_by: string;
+  updated_at?: string;
+  created_by?: string;
   latest_version_id?: string | null;
 }
 

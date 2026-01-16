@@ -195,3 +195,6 @@ class BriefingService:
         if not briefing:
             raise ValueError("Briefing not found.")
         return briefing_repo.list_chat_messages(briefing_id)
+
+    def list_briefings(self, *, limit: int = 50) -> list[Dict[str, Any]]:
+        return briefing_repo.list_briefings(limit)
